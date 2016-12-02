@@ -443,7 +443,7 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
             [queueArray addObjectsFromArray:_mixBus1];
         }
         
-        if (nil != _mixBus1) {
+        if (nil != _mixQueue) {
             [queueArray addObjectsFromArray:_mixQueue];
         }
         
