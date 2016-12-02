@@ -432,16 +432,17 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
  */
 - (NSArray *)mixerQueue
 {
-    NSMutableArray *queueArray = @[];
-    if (nil != _mixBus0) {
-        [queueArray addObjectsFromArray:_mixBus0];
+    NSMutableArray<STKMixableQueueEntry *> *queueArray = [[NSMutableArray alloc] init];
+    
+    if (_mixBus0 != nil) {
+        [queueArray addObject:_mixBus0];
     }
     
-    if (nil != _mixBus1) {
-        [queueArray addObjectsFromArray:_mixBus1];
+    if (_mixBus1 != nil) {
+        [queueArray addObject:_mixBus1];
     }
     
-    if (nil != _mixQueue) {
+    if (_mixQueue != nil & [_mixQueue count] > 0) {
         [queueArray addObjectsFromArray:_mixQueue];
     }
     
