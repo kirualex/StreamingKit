@@ -434,16 +434,28 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
 {
     NSMutableArray<STKMixableQueueEntry *> *queueArray = [[NSMutableArray alloc] init];
     
-    if (_mixBus0 != nil) {
-        [queueArray addObject:_mixBus0];
-    }
-    
-    if (_mixBus1 != nil) {
-        [queueArray addObject:_mixBus1];
-    }
-    
     if (_mixQueue != nil & [_mixQueue count] > 0) {
         [queueArray addObjectsFromArray:_mixQueue];
+    }
+    
+    if (_busState == BUS_0 || _busState == FADE_FROM_0) {
+        // Insert next track
+        if (_mixBus1 != nil) {
+            [queueArray addObject:_mixBus1];
+        }
+        // Insert current track
+        if (_mixBus0 != nil) {
+            [queueArray addObject:_mixBus0];
+        }
+    } else if (_busState == BUS_1 || _busState == FADE_FROM_1) {
+        // Insert next track
+        if (_mixBus0 != nil) {
+            [queueArray addObject:_mixBus0];
+        }
+        // Insert current track
+        if (_mixBus1 != nil) {
+            [queueArray addObject:_mixBus1];
+        }
     }
     
     return queueArray;
