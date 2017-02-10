@@ -382,11 +382,7 @@ static void PopulateOptionsWithDefault(STKAutoRecoveringHTTPDataSourceOptions* o
     }
     else
     {
-        // The super call here is intentional. The self method is overloaded
-        // to attempt a retry if the stream seems to be truncated. The super
-        // method implements default handling that will send the delegate an
-        // eof.
-        [super dataSourceEof: dataSource];
+        [self.delegate dataSourceErrorOccured:dataSource];
     }
 }
 

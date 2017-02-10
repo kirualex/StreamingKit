@@ -1567,11 +1567,6 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
 
 -(void) dataSourceErrorOccured:(STKDataSource*)dataSourceIn
 {
-    if (currentlyReadingEntry.dataSource != dataSourceIn)
-    {
-        return;
-    }
-    
     [self unexpectedError:STKAudioPlayerErrorDataNotFound];
 }
 
