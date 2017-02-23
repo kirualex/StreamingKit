@@ -231,15 +231,19 @@ const int k_readBufferSize = 64 * 1024;
 -(void) dataSourceErrorOccured:(STKDataSource*)dataSource
 {
     NSLog(@"I'm probably going to crash; data source error");
+    [self.errorDelegate mixableEntry:self didError:STKMixableQueueEntryErrorDataSourceError];
 }
 
 -(void) dataSourceEof:(STKDataSource*)dataSource
 {
+    [self.errorDelegate mixableEntry:self didError:STKMixableQueueEntryErrorEof];
+    
     OSSpinLockLock(&_internalStateLock);
     self->lastFrameQueued = self->framesQueued;
     OSSpinLockUnlock(&_internalStateLock);
     
     self.dataSource.delegate = nil;
+    self.errorDelegate = nil;
     [self.dataSource unregisterForEvents];
     [self.dataSource close];
 }

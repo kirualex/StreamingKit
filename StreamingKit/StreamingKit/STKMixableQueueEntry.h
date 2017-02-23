@@ -9,6 +9,21 @@
 #import "STKQueueEntry.h"
 
 
+typedef enum
+{
+    STKMixableQueueEntryErrorEof,
+    STKMixableQueueEntryErrorDataSourceError
+}
+STKMixableQueueEntryError;
+
+@class STKMixableQueueEntry;
+
+@protocol STKMixableQueueEntryErrorDelegate <NSObject>
+
+-(void) mixableEntry:(STKMixableQueueEntry *)entry didError:(STKMixableQueueEntryError)error;
+
+@end
+
 @interface STKMixableQueueEntry : STKQueueEntry<STKDataSourceDelegate>
 {
 @public
@@ -24,6 +39,8 @@
     
     BOOL _waiting;
 }
+
+@property (readwrite, weak) id<STKMixableQueueEntryErrorDelegate> errorDelegate;
 
 - (void)setFadeoutAt:(Float64)fadeFrame overDuration:(Float64)fadeForFrames trackDuration:(Float64)totalFrames;
 - (void)fadeFromNow;
