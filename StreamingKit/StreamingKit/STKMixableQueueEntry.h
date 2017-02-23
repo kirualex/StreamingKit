@@ -40,7 +40,7 @@ STKMixableQueueEntryError;
     BOOL _waiting;
 }
 
-@property (readwrite, unsafe_unretained) id<STKMixableQueueEntryErrorDelegate> errorDelegate;
+@property (readwrite, weak) id<STKMixableQueueEntryErrorDelegate> errorDelegate;
 
 - (void)setFadeoutAt:(Float64)fadeFrame overDuration:(Float64)fadeForFrames trackDuration:(Float64)totalFrames;
 - (void)fadeFromNow;
