@@ -22,7 +22,7 @@ typedef enum
 } BUS_STATE;
 
 
-@interface STKQueueMixer() {
+@interface STKQueueMixer() <STKMixableQueueEntryErrorDelegate> {
     
     AUGraph _audioGraph;
     
@@ -618,6 +618,7 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
 {
     STKDataSource *source = [STKAudioPlayer dataSourceWithChangableURLFromInitialURL:url];
     STKMixableQueueEntry *mixableEntry = [[STKMixableQueueEntry alloc] initWithDataSource:source andQueueItemId:trackID];
+    mixableEntry.errorDelegate = self;
     [mixableEntry setFadeoutAt:(crossfade * k_samplesPerMs) overDuration:(fadeFor * k_samplesPerMs) trackDuration:(totalTime * k_samplesPerMs)];
     
     return mixableEntry;
@@ -869,6 +870,12 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
     }
     
     pthread_mutex_destroy(&_playerMutex);
+}
+
+#pragma mark STKMixableQueueEntryErrorDelegate
+
+- (void)mixableEntry:(STKMixableQueueEntry *)entry didError:(STKMixableQueueEntryError)error {
+    self.mixerState = STKQueueMixerStateError;
 }
 
 @end
