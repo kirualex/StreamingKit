@@ -525,12 +525,22 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
  */
 - (void)insertTrack:(NSURL *)url withID:(NSString *)trackID trackLength:(NSInteger)totalTime fadeAt:(NSInteger)crossfade fadeTime:(NSInteger)fadeFor atIndex:(int) trackIndex
 {
-    STKMixableQueueEntry *pushingEntry = [self entryForURL:url withID:trackID trackLength:totalTime fadeAt:crossfade fadeTime:fadeFor];
-    [pushingEntry beginEntryLoad];
-    
     pthread_mutex_lock(&_playerMutex);
-    [_mixQueue insertObject:pushingEntry atIndex:trackIndex - 1];
+    int mixQueueCount = _mixQueue.count;
     pthread_mutex_unlock(&_playerMutex);
+    
+    if (mixQueueCount == 0) {
+        [self queueURL:url withID:trackID trackLength:totalTime fadeAt:crossfade fadeTime:fadeFor];
+    } else if (mixQueueCount == 1) {
+        [self playNext:url withID:trackID trackLength:totalTime fadeAt:crossfade fadeTime:fadeFor];
+    } else {
+        STKMixableQueueEntry *pushingEntry = [self entryForURL:url withID:trackID trackLength:totalTime fadeAt:crossfade fadeTime:fadeFor];
+        [pushingEntry beginEntryLoad];
+        
+        pthread_mutex_lock(&_playerMutex);
+        [_mixQueue insertObject:pushingEntry atIndex:MIN(trackIndex - 1, _mixQueue.count)];
+        pthread_mutex_unlock(&_playerMutex);
+    }
 }
 
 /*
