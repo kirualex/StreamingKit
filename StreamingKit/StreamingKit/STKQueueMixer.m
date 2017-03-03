@@ -22,7 +22,7 @@ typedef enum
 } BUS_STATE;
 
 
-@interface STKQueueMixer() {
+@interface STKQueueMixer() <STKMixableQueueEntryErrorDelegate> {
     
     AUGraph _audioGraph;
     
@@ -525,12 +525,22 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
  */
 - (void)insertTrack:(NSURL *)url withID:(NSString *)trackID trackLength:(NSInteger)totalTime fadeAt:(NSInteger)crossfade fadeTime:(NSInteger)fadeFor atIndex:(int) trackIndex
 {
-    STKMixableQueueEntry *pushingEntry = [self entryForURL:url withID:trackID trackLength:totalTime fadeAt:crossfade fadeTime:fadeFor];
-    [pushingEntry beginEntryLoad];
-    
     pthread_mutex_lock(&_playerMutex);
-    [_mixQueue insertObject:pushingEntry atIndex:_mixQueue.count + 1 - trackIndex];
+    int mixQueueCount = _mixQueue.count;
     pthread_mutex_unlock(&_playerMutex);
+    
+    if (mixQueueCount == 0) {
+        [self queueURL:url withID:trackID trackLength:totalTime fadeAt:crossfade fadeTime:fadeFor];
+    } else if (mixQueueCount == 1) {
+        [self playNext:url withID:trackID trackLength:totalTime fadeAt:crossfade fadeTime:fadeFor];
+    } else {
+        STKMixableQueueEntry *pushingEntry = [self entryForURL:url withID:trackID trackLength:totalTime fadeAt:crossfade fadeTime:fadeFor];
+        [pushingEntry beginEntryLoad];
+        
+        pthread_mutex_lock(&_playerMutex);
+        [_mixQueue insertObject:pushingEntry atIndex:MIN(trackIndex - 1, _mixQueue.count)];
+        pthread_mutex_unlock(&_playerMutex);
+    }
 }
 
 /*
@@ -618,6 +628,7 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
 {
     STKDataSource *source = [STKAudioPlayer dataSourceWithChangableURLFromInitialURL:url];
     STKMixableQueueEntry *mixableEntry = [[STKMixableQueueEntry alloc] initWithDataSource:source andQueueItemId:trackID];
+    mixableEntry.errorDelegate = self;
     [mixableEntry setFadeoutAt:(crossfade * k_samplesPerMs) overDuration:(fadeFor * k_samplesPerMs) trackDuration:(totalTime * k_samplesPerMs)];
     
     return mixableEntry;
@@ -869,6 +880,12 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
     }
     
     pthread_mutex_destroy(&_playerMutex);
+}
+
+#pragma mark STKMixableQueueEntryErrorDelegate
+
+- (void)mixableEntry:(STKMixableQueueEntry *)entry didError:(STKMixableQueueEntryError)error {
+    self.mixerState = STKQueueMixerStateError;
 }
 
 @end
