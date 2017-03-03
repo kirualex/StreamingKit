@@ -432,7 +432,9 @@
     
     eventsRunLoop = savedEventsRunLoop;
 	
-    NSAssert([NSRunLoop currentRunLoop] == eventsRunLoop, @"Seek called on wrong thread");
+    if ([NSRunLoop currentRunLoop] != eventsRunLoop) {
+        return;
+    }
     
     stream = 0;
     relativePosition = 0;
