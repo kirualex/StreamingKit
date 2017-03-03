@@ -564,6 +564,7 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
     pthread_cond_destroy(&mainThreadSyncCallReadyCondition);
     
     free(readBuffer);
+    free(pcmAudioBufferList.mBuffers[0].mData);
 }
 
 -(void) startSystemBackgroundTask
