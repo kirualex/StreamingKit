@@ -233,7 +233,9 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
     // Here, the 0 is frame offset, which when 0 will make the change straight away.
     error = AudioUnitSetParameter(player->_mixerUnit, kMultiChannelMixerParam_Volume, kAudioUnitScope_Input, inBusNumber, volume, 0);
     
-    // Push data to hardware and update where to place data    
+    OSSpinLockLock(&entryForBus->spinLock);
+    
+    // Push data to hardware and update where to place data
     AudioBuffer* audioBuffer = entryForBus->_pcmAudioBuffer;
     UInt32 totalFramesCopied = 0;
     UInt32 frameSizeInBytes = entryForBus->_pcmBufferFrameSizeInBytes;
@@ -263,6 +265,8 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
         bufferIsReady = NO;
     }
     
+    OSSpinLockUnlock(&entryForBus->spinLock);
+    
     if (bufferIsReady)
     {
         player.mixerState = STKQueueMixerStatePlaying;
@@ -274,7 +278,9 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
             ioData->mBuffers[0].mNumberChannels = 2;
             ioData->mBuffers[0].mDataByteSize = frameSizeInBytes * framesToCopy;
             
-            memcpy(ioData->mBuffers[0].mData, audioBuffer->mData + (start * frameSizeInBytes), ioData->mBuffers[0].mDataByteSize);
+            if (audioBuffer != NULL) {
+                memcpy(ioData->mBuffers[0].mData, audioBuffer->mData + (start * frameSizeInBytes), ioData->mBuffers[0].mDataByteSize);
+            }
             totalFramesCopied = framesToCopy;
             
             OSSpinLockLock(&entryForBus->spinLock);
@@ -290,8 +296,10 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
             ioData->mBuffers[0].mNumberChannels = 2;
             ioData->mBuffers[0].mDataByteSize = frameSizeInBytes * framesToCopy;
             
-            memcpy(ioData->mBuffers[0].mData, audioBuffer->mData + (start * frameSizeInBytes), ioData->mBuffers[0].mDataByteSize);
-
+            if (audioBuffer != NULL) {
+                memcpy(ioData->mBuffers[0].mData, audioBuffer->mData + (start * frameSizeInBytes), ioData->mBuffers[0].mDataByteSize);
+            }
+            
             UInt32 moreFramesToCopy = 0;
             UInt32 delta = inNumberFrames - framesToCopy;
             
@@ -302,7 +310,9 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
                 ioData->mBuffers[0].mNumberChannels = 2;
                 ioData->mBuffers[0].mDataByteSize += frameSizeInBytes * moreFramesToCopy;
                 
-                memcpy(ioData->mBuffers[0].mData + (framesToCopy * frameSizeInBytes), audioBuffer->mData, frameSizeInBytes * moreFramesToCopy);
+                if (audioBuffer != NULL) {
+                    memcpy(ioData->mBuffers[0].mData + (framesToCopy * frameSizeInBytes), audioBuffer->mData, frameSizeInBytes * moreFramesToCopy);
+                }
             }
             
             totalFramesCopied = framesToCopy + moreFramesToCopy;
@@ -350,7 +360,7 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
 
 
 /*
- @brief Stop or pause playback. 
+ @brief Stop or pause playback.
  
  @param keepTrack should be set to YES if we are pausing playback. If set to NO, buffer and queue will be cleared.
  
@@ -435,7 +445,9 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
     NSMutableArray<STKMixableQueueEntry *> *queueArray = [[NSMutableArray alloc] init];
     
     if (_mixQueue != nil & [_mixQueue count] > 0) {
+        pthread_mutex_lock(&_playerMutex);
         [queueArray addObjectsFromArray:_mixQueue];
+        pthread_mutex_unlock(&_playerMutex);
     }
     
     if (_busState == BUS_0 || _busState == FADE_FROM_0) {
@@ -708,24 +720,24 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
                 _busState = FADE_FROM_0;
                 [skippedEntry fadeFromNow];
                 break;
-                
+            
             case BUS_1:
                 _busState = FADE_FROM_1;
                 [skippedEntry fadeFromNow];
                 break;
-                
+            
             case FADE_FROM_0:
                 [self trackEntry:_mixBus0 finishedPlayingOnBus:BUS_0];
                 [skippedEntry fadeFromNow];
                 _busState = FADE_FROM_1;
                 break;
-                
+            
             case FADE_FROM_1:
                 [self trackEntry:_mixBus1 finishedPlayingOnBus:BUS_1];
                 [skippedEntry fadeFromNow];
                 _busState = FADE_FROM_0;
                 break;
-                
+            
             default:
                 NSAssert(NO, @"Unexpected bus state found when skipping queue entry with ID %@.", entryID);
                 break;
@@ -833,9 +845,10 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
 
 
 - (void)changeTrack:(NSString *)withID toUse:(NSURL *)newURL {
-    
+    pthread_mutex_lock(&_playerMutex);
     STKMixableQueueEntry *entryToChange = [self entryForID:withID];
     [entryToChange changeToURL:newURL];
+    pthread_mutex_unlock(&_playerMutex);
 }
 
 
