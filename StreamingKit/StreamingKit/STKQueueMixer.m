@@ -444,11 +444,11 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
 {
     NSMutableArray<STKMixableQueueEntry *> *queueArray = [[NSMutableArray alloc] init];
     
+    pthread_mutex_lock(&_playerMutex);
     if (_mixQueue != nil & [_mixQueue count] > 0) {
-        pthread_mutex_lock(&_playerMutex);
         [queueArray addObjectsFromArray:_mixQueue];
-        pthread_mutex_unlock(&_playerMutex);
     }
+    pthread_mutex_unlock(&_playerMutex);
     
     if (_busState == BUS_0 || _busState == FADE_FROM_0) {
         // Insert next track
@@ -699,7 +699,9 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
             _mixBus0 = newNextUp;
         }
         
+        pthread_mutex_lock(&_playerMutex);
         [skippedEntry tidyUp];
+        pthread_mutex_unlock(&_playerMutex);
     }
     else if (nowPlaying != skippedEntry)
     {
@@ -759,13 +761,16 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
         return _mixBus1;
     }
     
+    STKMixableQueueEntry *mixEntry = nil;
+    pthread_mutex_lock(&_playerMutex);
     for (STKMixableQueueEntry *entry in _mixQueue) {
         if ([entryID isEqualToString:(NSString *)entry.queueItemId]) {
-            return entry;
+            mixEntry = entry;
         }
     }
+    pthread_mutex_unlock(&_playerMutex);
     
-    return nil;
+    return mixEntry;
 }
 
 
@@ -774,7 +779,10 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
     // Ensure bus is set to 0 volume
     AudioUnitSetParameter (_mixerUnit, kMultiChannelMixerParam_Volume, kAudioUnitScope_Input, busNumber, 0, 0);
     
+    pthread_mutex_lock(&_playerMutex);
     [_mixQueue removeObject:entry];
+    pthread_mutex_unlock(&_playerMutex);
+    
     [self.delegate queue:self didFinishPlayingQueueItemId:entry.queueItemId];
     
     STKMixableQueueEntry *nowPlaying;
@@ -836,17 +844,19 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
 
 - (void)loadTracks
 {
+    pthread_mutex_lock(&_playerMutex);
     int queueSize = (int)_mixQueue.count;
     for (int entryIndex = queueSize - 1; entryIndex > MAX((queueSize - k_maxLoadingEntries), 0); --entryIndex)
     {
         [_mixQueue[entryIndex] beginEntryLoad];
     }
+    pthread_mutex_unlock(&_playerMutex);
 }
 
 
 - (void)changeTrack:(NSString *)withID toUse:(NSURL *)newURL {
-    pthread_mutex_lock(&_playerMutex);
     STKMixableQueueEntry *entryToChange = [self entryForID:withID];
+    pthread_mutex_lock(&_playerMutex);
     [entryToChange changeToURL:newURL];
     pthread_mutex_unlock(&_playerMutex);
 }
