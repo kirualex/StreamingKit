@@ -195,6 +195,14 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
     ioData->mBuffers[0].mDataByteSize = inNumberFrames * bytesPerFrame;
     
     float fadeValue = (entryForBus->framesPlayed - entryForBus->_fadeFrom) * entryForBus->_fadeRatio;
+    
+    // This is an edge case when user has no connection, but we are
+    // currently playing buffered frames, then user skips the track.
+    // So we can end up with situation when fadeout can't finish and glitches.
+    // To prevent this we set fade to finished when get exactly the same
+    // amount of framesPlayed and fadeFrom or else use fadeValue.
+    fadeValue = (entryForBus->framesPlayed == entryForBus->_fadeFrom) ? 1 : fadeValue;
+    
     float volume = 0;
     if (BUS_0 == inBusNumber)
     {
@@ -210,7 +218,7 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
             volume = 1;
         }
     }
-    else
+    else if (BUS_1 == inBusNumber)
     {
         if (BUS_1 == player->_busState || FADE_FROM_1 == player->_busState)
         {
@@ -225,13 +233,12 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
         }
     }
     
-    if (1 > volume && inBusNumber == player->_busState)
-    {
-        player->_busState = (player->_busState == BUS_0) ? FADE_FROM_0 : FADE_FROM_1;
-    }
-    
     // Here, the 0 is frame offset, which when 0 will make the change straight away.
     error = AudioUnitSetParameter(player->_mixerUnit, kMultiChannelMixerParam_Volume, kAudioUnitScope_Input, inBusNumber, volume, 0);
+    
+    if ((player->_busState == FADE_FROM_0 && inBusNumber == BUS_0) || (player->_busState == FADE_FROM_1 && inBusNumber == BUS_1)) {
+        return error;
+    }
     
     OSSpinLockLock(&entryForBus->spinLock);
     
@@ -241,27 +248,30 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
     UInt32 frameSizeInBytes = entryForBus->_pcmBufferFrameSizeInBytes;
     UInt32 used = entryForBus->_pcmBufferUsedFrameCount;
     UInt32 start = entryForBus->_pcmBufferFrameStartIndex;
-    UInt32 end = (entryForBus->_pcmBufferFrameStartIndex + entryForBus->_pcmBufferUsedFrameCount) % entryForBus->_pcmBufferTotalFrameCount;
+    UInt32 total = entryForBus->_pcmBufferTotalFrameCount;
+    UInt32 end = (entryForBus->_pcmBufferFrameStartIndex + used) % total;
+    SInt64 framesPlayed = entryForBus->framesPlayed;
+    SInt64 framesQueued = entryForBus->framesQueued;
     
     BOOL bufferIsReady = YES;
     BOOL fileFinishedEarly = NO;
     
     if (STKQueueMixerStateBuffering == player.mixerState) {
-        if ((entryForBus->framesPlayed + entryForBus->_pcmBufferUsedFrameCount) < player->_framesToContinueAfterBuffer) {
+        if ((framesPlayed + used) < player->_framesToContinueAfterBuffer) {
             
             bufferIsReady = NO;
         }
     } else if (STKQueueMixerStateReady == player.mixerState) {
-        if ((entryForBus->framesQueued - entryForBus->framesPlayed) < k_framesRequiredToPlay) {
+        if ((framesQueued - framesPlayed) < k_framesRequiredToPlay) {
             
             bufferIsReady = NO;
         }
-    } else if (ABS(entryForBus->lastFrameQueued - entryForBus->framesPlayed) <= inNumberFrames && !entryForBus.dataSource.hasBytesAvailable) {
+    } else if (ABS(entryForBus->lastFrameQueued - framesPlayed) <= inNumberFrames && !entryForBus.dataSource.hasBytesAvailable) {
         
         fileFinishedEarly = YES;
         
-    } else if (entryForBus->_pcmBufferUsedFrameCount <= inNumberFrames) {
-    
+    }
+    if (used <= inNumberFrames) {
         bufferIsReady = NO;
     }
     
@@ -286,17 +296,17 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
             OSSpinLockLock(&entryForBus->spinLock);
             entryForBus->_pcmBufferFrameStartIndex = (entryForBus->_pcmBufferFrameStartIndex + totalFramesCopied) % entryForBus->_pcmBufferTotalFrameCount;
             entryForBus->framesPlayed += MIN(inNumberFrames, entryForBus->_pcmBufferUsedFrameCount);
-            entryForBus->_pcmBufferUsedFrameCount -= totalFramesCopied;
+            entryForBus->_pcmBufferUsedFrameCount -= MIN(entryForBus->_pcmBufferUsedFrameCount, totalFramesCopied);
             OSSpinLockUnlock(&entryForBus->spinLock);
         }
         else
         {
-            UInt32 framesToCopy = MIN(inNumberFrames, entryForBus->_pcmBufferTotalFrameCount - start);
+            UInt32 framesToCopy = MIN(inNumberFrames, total - start);
             
             ioData->mBuffers[0].mNumberChannels = 2;
             ioData->mBuffers[0].mDataByteSize = frameSizeInBytes * framesToCopy;
             
-            if (audioBuffer != NULL) {
+            if (audioBuffer != NULL && audioBuffer->mData != NULL) {
                 memcpy(ioData->mBuffers[0].mData, audioBuffer->mData + (start * frameSizeInBytes), ioData->mBuffers[0].mDataByteSize);
             }
             
@@ -320,7 +330,7 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
             OSSpinLockLock(&entryForBus->spinLock);
             entryForBus->_pcmBufferFrameStartIndex = (entryForBus->_pcmBufferFrameStartIndex + totalFramesCopied) % entryForBus->_pcmBufferTotalFrameCount;
             entryForBus->framesPlayed += MIN(inNumberFrames, entryForBus->_pcmBufferUsedFrameCount);
-            entryForBus->_pcmBufferUsedFrameCount -= totalFramesCopied;
+            entryForBus->_pcmBufferUsedFrameCount -= MIN(entryForBus->_pcmBufferUsedFrameCount, totalFramesCopied);
             OSSpinLockUnlock(&entryForBus->spinLock);
         }
         
@@ -329,16 +339,22 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
     else
     {
         player.mixerState = STKQueueMixerStateBuffering;
-        player->_framesToContinueAfterBuffer = entryForBus->framesPlayed + k_framesRequiredToPlay;
+        player->_framesToContinueAfterBuffer = framesPlayed + k_framesRequiredToPlay;
         
         memset(ioData->mBuffers[0].mData, 0, ioData->mBuffers[0].mDataByteSize);
-        return error;
+        return AudioUnitSetParameter(player->_mixerUnit, kMultiChannelMixerParam_Volume, kAudioUnitScope_Input, inBusNumber, 0, 0);;
     }
+    
+    OSSpinLockLock(&entryForBus->spinLock);
+    SInt64 newFramesQueued = entryForBus->framesQueued;
+    SInt64 newLastFrameQueued = entryForBus->lastFrameQueued;
+    SInt64 newFramesPlayed = entryForBus->framesPlayed;
+    OSSpinLockUnlock(&entryForBus->spinLock);
     
     if (totalFramesCopied < inNumberFrames)
     {
         player.mixerState = STKQueueMixerStateBuffering;
-        player->_framesToContinueAfterBuffer = entryForBus->framesQueued + k_framesRequiredToPlay;
+        player->_framesToContinueAfterBuffer = newFramesQueued + k_framesRequiredToPlay;
         
         UInt32 delta = inNumberFrames - totalFramesCopied;
         memset(ioData->mBuffers[0].mData + (totalFramesCopied * frameSizeInBytes), 0, delta * frameSizeInBytes);
@@ -350,8 +366,7 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
         }
     }
     
-    if (entryForBus->framesPlayed == entryForBus->lastFrameQueued)
-    {
+    if (newFramesPlayed == newLastFrameQueued) {
         [player trackEntry:entryForBus finishedPlayingOnBus:inBusNumber];
     }
     
@@ -487,7 +502,9 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
 - (void)queueURL:(NSURL *)url withID:(NSString *)trackID trackLength:(NSInteger)totalTime fadeAt:(NSInteger)crossfade fadeTime:(NSInteger)fadeFor
 {
     STKMixableQueueEntry *mixableEntry = [self entryForURL:url withID:trackID trackLength:totalTime fadeAt:crossfade fadeTime:fadeFor];
+    pthread_mutex_lock(&_playerMutex);
     [_mixQueue enqueue:mixableEntry];
+    pthread_mutex_unlock(&_playerMutex);
     
     [self updateQueue];
     [self loadTracks];
@@ -699,17 +716,15 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
             _mixBus0 = newNextUp;
         }
         
-        pthread_mutex_lock(&_playerMutex);
         [skippedEntry tidyUp];
-        pthread_mutex_unlock(&_playerMutex);
     }
     else if (nowPlaying != skippedEntry)
     {
         // If we're skipping something from the track, we don't need to worry too much...
         pthread_mutex_lock(&_playerMutex);
         [_mixQueue removeObject:skippedEntry];
-        [skippedEntry tidyUp];
         pthread_mutex_unlock(&_playerMutex);
+        [skippedEntry tidyUp];
         
         return;
     }
@@ -846,11 +861,11 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
 {
     pthread_mutex_lock(&_playerMutex);
     int queueSize = (int)_mixQueue.count;
+    pthread_mutex_unlock(&_playerMutex);
     for (int entryIndex = queueSize - 1; entryIndex > MAX((queueSize - k_maxLoadingEntries), 0); --entryIndex)
     {
         [_mixQueue[entryIndex] beginEntryLoad];
     }
-    pthread_mutex_unlock(&_playerMutex);
 }
 
 
@@ -873,14 +888,12 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
     _mixBus0 = nil;
     _mixBus1 = nil;
     
-    pthread_mutex_lock(&_playerMutex);
-    
     for (STKMixableQueueEntry *entry in _mixQueue) {
         [entry tidyUp];
     }
     
+    pthread_mutex_lock(&_playerMutex);
     [_mixQueue removeAllObjects];
-    
     pthread_mutex_unlock(&_playerMutex);
     
     _startingPlay = YES;
