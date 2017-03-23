@@ -908,7 +908,9 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
 #pragma mark STKMixableQueueEntryErrorDelegate
 
 - (void)mixableEntry:(STKMixableQueueEntry *)entry didError:(STKMixableQueueEntryError)error {
-    [self.delegate queue:self didErrorPlayingQueueItemId:entry.queueItemId];
+    if (error == STKMixableQueueEntryErrorEof) {
+        [self.delegate queue:self didErrorPlayingQueueItemId:entry.queueItemId];
+    }
     
     self.mixerState = STKQueueMixerStateError;
 }
