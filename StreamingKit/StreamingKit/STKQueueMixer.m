@@ -613,9 +613,9 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
     STKMixableQueueEntry *replacingEntry = [self entryForURL:url withID:trackID trackLength:totalTime fadeAt:crossfade fadeTime:fadeFor];
     [replacingEntry beginEntryLoad];
     
+    pthread_mutex_lock(&_playerMutex);
     STKMixableQueueEntry *bargedEntry = [_mixQueue objectAtIndex:trackIndex];
     
-    pthread_mutex_lock(&_playerMutex);
     [_mixQueue replaceObjectAtIndex:_mixQueue.count + 1 - trackIndex withObject:replacingEntry];
     pthread_mutex_unlock(&_playerMutex);
     
@@ -830,7 +830,10 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
         return;
     }
     
+    pthread_mutex_lock(&_playerMutex);
     STKMixableQueueEntry *nextUp = _mixQueue.dequeue;
+    pthread_mutex_unlock(&_playerMutex);
+    
     if (nil == nextUp)
     {
         return;
@@ -861,11 +864,11 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
 {
     pthread_mutex_lock(&_playerMutex);
     int queueSize = (int)_mixQueue.count;
-    pthread_mutex_unlock(&_playerMutex);
     for (int entryIndex = queueSize - 1; entryIndex > MAX((queueSize - k_maxLoadingEntries), 0); --entryIndex)
     {
         [_mixQueue[entryIndex] beginEntryLoad];
     }
+    pthread_mutex_unlock(&_playerMutex);
 }
 
 
@@ -888,11 +891,11 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
     _mixBus0 = nil;
     _mixBus1 = nil;
     
+    pthread_mutex_lock(&_playerMutex);
     for (STKMixableQueueEntry *entry in _mixQueue) {
         [entry tidyUp];
     }
     
-    pthread_mutex_lock(&_playerMutex);
     [_mixQueue removeAllObjects];
     pthread_mutex_unlock(&_playerMutex);
     
