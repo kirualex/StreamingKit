@@ -558,7 +558,7 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
     [pushingEntry beginEntryLoad];
     
     pthread_mutex_lock(&_playerMutex);
-    [_mixQueue insertObject:pushingEntry atIndex:MIN(trackIndex, _mixQueue.count - 1)];
+    [_mixQueue insertObject:pushingEntry atIndex:MIN(trackIndex, _mixQueue.count)];
     pthread_mutex_unlock(&_playerMutex);
 }
 
