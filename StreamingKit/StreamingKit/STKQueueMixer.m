@@ -715,8 +715,6 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
         [_mixQueue removeObject:skippedEntry];
         pthread_mutex_unlock(&_playerMutex);
         [skippedEntry tidyUp];
-        
-        return;
     }
     else
     {
