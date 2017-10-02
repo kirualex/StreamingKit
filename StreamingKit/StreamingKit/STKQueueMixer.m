@@ -233,12 +233,12 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
         }
     }
     
+    if (1 > volume && inBusNumber == player->_busState) {
+        player->_busState = (player->_busState == BUS_0) ? FADE_FROM_0 : FADE_FROM_1;
+    }
+    
     // Here, the 0 is frame offset, which when 0 will make the change straight away.
     error = AudioUnitSetParameter(player->_mixerUnit, kMultiChannelMixerParam_Volume, kAudioUnitScope_Input, inBusNumber, volume, 0);
-    
-    if ((player->_busState == FADE_FROM_0 && inBusNumber == BUS_0) || (player->_busState == FADE_FROM_1 && inBusNumber == BUS_1)) {
-        return error;
-    }
     
     OSSpinLockLock(&entryForBus->spinLock);
     
