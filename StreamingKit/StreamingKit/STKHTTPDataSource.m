@@ -527,6 +527,12 @@
                              
                              if (seekStart > 0 && supportsSeek)
                              {
+                                 SInt64 availableLength = self.length - 1;
+                                 if (seekStart > availableLength) {
+                                     [self eof];
+                                     return;
+                                 }
+                                 
                                  CFHTTPMessageSetHeaderFieldValue(message, CFSTR("Range"), (__bridge CFStringRef)[NSString stringWithFormat:@"bytes=%lld-", seekStart]);
                                  
                                  discontinuous = YES;

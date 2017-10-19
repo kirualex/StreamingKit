@@ -342,6 +342,11 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
         player->_framesToContinueAfterBuffer = framesPlayed + k_framesRequiredToPlay;
         
         memset(ioData->mBuffers[0].mData, 0, ioData->mBuffers[0].mDataByteSize);
+        
+        if (fileFinishedEarly && framesPlayed > 0) {
+            [player trackEntry:entryForBus finishedPlayingOnBus:inBusNumber];
+        }
+        
         return error;
     }
     
@@ -690,8 +695,8 @@ static OSStatus OutputRenderCallback(void* inRefCon, AudioUnitRenderActionFlags*
         return;
     }
     
-    STKMixableQueueEntry *nextUp = (BUS_0 == _busState || FADE_FROM_0 == _busState) ? _mixBus1 : _mixBus0;
-    STKMixableQueueEntry *nowPlaying = (BUS_0 == _busState || FADE_FROM_0 == _busState) ? _mixBus0 : _mixBus1;
+    STKMixableQueueEntry *nextUp = (BUS_0 == _busState) ? _mixBus1 : _mixBus0;
+    STKMixableQueueEntry *nowPlaying = (BUS_0 == _busState) ? _mixBus0 : _mixBus1;
     
     // If we're skipping the next up track, we need to do something special...
     if (nextUp == skippedEntry)
