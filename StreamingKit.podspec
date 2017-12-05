@@ -13,5 +13,4 @@ Pod::Spec.new do |s|
   s.ios.frameworks   = 'SystemConfiguration', 'CFNetwork', 'CoreFoundation', 'AudioToolbox'
   s.osx.deployment_target = '10.7'
   s.osx.frameworks   = 'SystemConfiguration', 'CFNetwork', 'CoreFoundation', 'AudioToolbox', 'AudioUnit'
-  s.pod_target_xcconfig = { 'SWIFT_VERSION' => '3.0' }
 end
